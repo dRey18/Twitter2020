@@ -38,6 +38,16 @@ function commands(req, res){
         case 'like_tweet':
             tweet.likeTweet(req, res);
         break;
+        case 'dislike_tweet':
+            tweet.disLike(req, res);
+        break;
+        case 'reply_tweet':
+            tweet.replyTweet(req, res);
+        break;
+        case 'retweet_':
+            tweet.RETWEET(req, res);
+        break;
+
 
         default: return res.status(200).send({message:"comando incorrecto"})
     }

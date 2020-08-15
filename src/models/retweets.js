@@ -5,7 +5,7 @@ var Schema = moongose.Schema;
 
 var RTweetSchema = Schema({
 tweet: String,
-comment: Number,
+comment: String,
 nombreUs: String,
 user: {type: Schema.ObjectId, ref: 'usuario'},
 })
