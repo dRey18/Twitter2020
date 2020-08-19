@@ -4,6 +4,8 @@ var Usuario = require("../models/usuario");
 var Tweet = require("../models/tweets");
 var Retweet = require("../models/retweets");
 const { relativeTimeRounding } = require("moment");
+const { response } = require("express");
+const { restart } = require("nodemon");
 
 function addTweet(req, res){
     var tweetU = new Tweet();
@@ -76,11 +78,15 @@ function deleteTweet(req, res){
     if(com[1]){
         Tweet.findOne({_id: tweetIdUs}, (err, foundTweet)=>{
             if(foundTweet){
-                if(foundTweet.user != id) return res.status(500).send({message: 'No cuenta con el permiso de eliminar el tweet'})
-                Tweet.findByIdAndDelete(tweetIdUs, (err, tweetEliminado)=>{
-                    if(err) return res.status(500).send({message: 'Error en la peticion del tweet'})
-                    if(!tweetEliminado) return res.status(404).send({message: 'Error al eliminar el tweet'})
-                    return res.status(200).send({message: "Tweet Eliminado correctamente", tweetEliminado})
+                //console.log(foundTweet)
+                if(foundTweet.user != id) return res.status(500).send({message: 'Necesita autorizacion para eliminar el tweet'})
+                Retweet.find({tweet:tweetIdUs}, (err, foundRetw)=>{
+                    if(foundRetw) eliminarRetweet(req, res, tweetIdUs)
+                    Tweet.findByIdAndDelete(tweetIdUs, (err, tweetDepurado)=>{
+                        if(err) return res.status(500).send({message:'Err en la peticion de tweet'})
+                        if(!tweetDepurado) return res.status(404).send({message:'Err al eliminar tweet'})
+                        return res.status(200).send({message:'Tweet eliminado correctamente'})
+                    })
                 })
             }else{
                 return res.status(200).send({message: 'El tweet no existe en la DB'});
@@ -89,6 +95,10 @@ function deleteTweet(req, res){
     }else{
         return res.status(400).send({message:"Complete los datos"})
     }
+}
+
+function eliminarRetweet(req, res, tweetIdUs){
+    Retweet.deleteMany({tweet:tweetIdUs}).exec();
 }
 
 function viewTweets(req, res){ 
@@ -244,46 +254,52 @@ function RETWEET(req, res){
     var comments = com[2];
 
     if(com[1]){
-        Usuario.findById(id, (err, findedUser) => {
-            if(err) return res.status(404).send({ message: 'Err al encontrar al usuario'})
-            if(!findedUser) return res.status(500).send({ message: 'El usuario no existe'})
-            if(com.length>=3){
-                for(let i=3; i<com.length;i++){
-                    comments = comments + " " + com[i]
+    Tweet.findOne({_id: tweetId}, (err, tweetEncontrado)=>{
+        if(err) return res.status(404).send({message:'ERR al buscar tweet'})
+        if(!tweetEncontrado) return res.status(500).send({message:'El tweet no existe en la DB'})
+        Usuario.findOne({_id: id, 'follow._id': tweetEncontrado.user}, (err, usEncontrado)=>{
+            if(err) return res.status(500).send({message:'ERR en la peticion de tweet'})
+            if(usEncontrado == null){
+            if(tweetEncontrado.user == id) return res.status(200).send({message:'No se puede dar auto retweet'})
+            return res.status(200).send({message:'Es necesario seguir al usuario para poder hacer retweet'})
+        }
+        Retweet.find({tweet: tweetId, user: id}, (err, findedR)=>{
+            if(findedR.length>=1){
+                Retweet.findOneAndDelete({tweet: tweetId, user: id}, (err, retweetDepurado)=>{
+                    if(err) return res.status(500).send({message:'ERR en la peticion de tweet'})
+                    if(!retweetDepurado) return res.status(404).send({message:'No se encontro el tweet'})
+                    return res.status(200).send({message:'Retweet eliminado:)'})
+                })
+            }else{
+                if(com.length>=3){
+                    for(let i =3; i<com.length; i++){
+                        comments = comments + " " + com[i]
+                    }
                 }
+
+                retweet.tweet = tweetEncontrado.descripcion;
+                retweet.comment = comments;
+                retweet.nombreRe = usEncontrado.user;
+                retweet.nombreUs = tweetEncontrado.user;
+                retweet.nombreOriginal = tweetEncontrado.nombreUs;
+                retweet.user = id;
+                retweet.tweet = tweetId;
+                Tweet.findOneAndUpdate({_id: tweetId}, {retweet: findedR._id}, {new: true}).exec();
+                retweet.save((err, savedRetweet)=>{
+                    if(err) return res.status(500).send({message:'ERR el guardar tweet'})
+                    if(savedRetweet){
+                        res.status(200).send({message:'Congratulation'})
+                    }else{
+                        res.status(400).send({message:'Fallo al hacer retweet'})
+                    }
+                })
             }
-            Retweet.find({user: id}, (err, findedR) =>{
-                if(findedR.length >=1){
-                    Retweet.findOneAndDelete({user: id}, (err, retweetDepurado)=>{
-                        if(err) return res.status(500).send({message: 'Err en la peticion del tweet'})
-                        if(!retweetDepurado) return res.status(404).send({message: 'Err al eliminar el tweet'})
-                        return res.status(200).send({message: "Retweet Eliminado"})
-                    })
-                }else{
-                    Tweet.findOne({_id: tweetId}, (err, wantedTweet)=>{
-                        retweet.tweet = wantedTweet.descripcion;
-                        retweet.comment = comments;
-                        retweet.nombreRetweet = findedUser.user;
-                        retweet.user = wantedTweet.user; 
-                        retweet.nombreUs = wantedTweet.nombreUs;
-                        retweet.user = id;
-                        retweet.save((err, saveRetweet)=>{
-                            if(err) return res.status(500).send({ message: 'Err al guardar el tweet'})
-                            if(saveRetweet){
-                                res.status(200).send({message: "Retweeteado!!"})
-                            }else{
-                                res.status(404).send({message: 'Fallo al hacer el retweet'})
-                            }
-                        })
-                    })
-                }
-            })
         })
+    })
+})
     }else{
-        res.status(200).send({
-            message: 'Complete los datos'
-        })
-    }    
+        res.status(200).send({message:'Complete los datos'})
+    }
 }
 
 
@@ -295,5 +311,6 @@ module.exports = {
     likeTweet,
     disLike,
     replyTweet,
-    RETWEET
+    RETWEET,
+    eliminarRetweet
 }
