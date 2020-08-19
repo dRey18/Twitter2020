@@ -109,20 +109,23 @@ function viewTweets(req, res){
     if(com[1]){
         Tweet.findOne({nombreUs: {$regex: com[1], $options: "i"}} , (err, foundTweet)=>{
             if(err) return res.status(500).send({ message: 'error en la peticion de tweets' })
-            if(!foundTweet) return res.status(500).send({ message: 'Usuario no encontrado'})
-            Tweet.find({nombreUs: {$regex: com[1], $options: "i"}}, (err, finded)=>{ 
-                Usuario.findOne({_id: id, 'follow._id': foundTweet.user}, (err, foundUser)=>{
-                       if(foundUser == null && foundTweet.user != id){
-                        return res.status(200).send({Message: "Debe de seguir a este usuario para poder ver sus Tweets"})
-                       }else{
-                        if(err) return res.status(500).send({ message: 'error en la peticion de tweets' })
-                        if(!foundTweet) return res.status(404).send({ message: 'no se han podido moestrar los tweets' })
-                        return res.status(200).send({Message: "Tweets " + foundTweet.nombreUs, Tweets: finded})
-                       }
-                    })
+            if(!foundTweet) return res.status(500).send({ message: 'No se ha podido mostrar la lista tqeweet'})
+            
+            Usuario.findOne({_id: id, 'follow._id': foundTweet.user}, (err, foundUser)=>{
+                if(foundUser == null && foundTweet.user != id){
+                    return res.status(200).send({Message: "Debe de seguir a este usuario para poder ver sus Tweets"})
+                }else{
+                    Tweet.aggregate([
+                        {$match: {nombreUs: {$regex: com[1], $options: 'i'}}}, {$lookup: {from: 'retweets',
+                        localField: "_id", foreignField: "tweet", as: "retweets"}}, {$project:{ reacciones:0, user:0,
+                            __v:0, nombreUs:0}}
+                        ], (err, saved)=>{
+                            return res.status(200).send({tweets: saved})
+                        })
+                    }
+                })
             })
-        })
-    }else{
+        }else{
         return res.status(400).send({message:"Complete los datos"})
     }
 }
